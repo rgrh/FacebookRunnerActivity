@@ -6,22 +6,24 @@ Created on Sat Apr 18 06:16:32 2015
 @author: Roger
 """
 
-LIMIT = 9
+LIMIT = 10
 
 
-import facebook, numpy as np, pandas as pd, matplotlib.pyplot as plt
-from pandas import DataFrame, Series
+import facebook, numpy as np, matplotlib.pyplot as plt
+from pandas import DataFrame
 from datetime import datetime 
 from matplotlib.ticker import FuncFormatter
 
 
-hillary = ('hillaryclinton', 'Hillary Clinton')
+chris = ('CVHILLforAmerica', 'Christopher Hill')
 ted = ('tedcruzpage', 'Ted Cruz')
 marco = ('MarcoRubio', 'Marco Rubio')
 rand = ('RandPaul', 'Rand Paul')
 jeb = ('jebbush', 'Jeb Bush')
+hillary = ('hillaryclinton', 'Hillary Clinton')
 
-runners = ['hillary']#, 'ted', 'marco', 'rand', 'jeb']
+
+runners = ['chris', 'ted', 'marco', 'rand', 'hillary']
 
 
 #
@@ -153,6 +155,25 @@ def getPostData(runner):
     return r
 
 
+def splitLine(ax, x, y, splitNum, style1, style2):
+    '''Creates a two styled line given;
+    ax = an axis
+    x  = an array of x coordinates for 2D Line
+    y  = an array of y coordinates for 2D Line
+    splitNum = index number to split Line by x tick
+    style1 = dictionary for left part of Line
+    style2 = dictionary for right part of Line
+    '''
+    split = x[splitNum]
+    low_mask = x <= split
+    upper_mask = x >= split
+    
+    lower, = ax.plot(x[low_mask], y[low_mask], **style1)
+    upper, = ax.plot(x[upper_mask], y[upper_mask], **style2)
+    
+    return lower, upper
+
+
 def fmtXlabels(x, pos):
     '''x=value, pos=position'''
     if x >= len(newTimes):
@@ -176,19 +197,28 @@ for x in runners:
     
     r = getPostData(wall)
     
-    if len(newTimes) < LIMIT:
-        LIMIT = len(newTimes)
-    yLim = int(round(max(r['Likes'].max(), r['Shares'].max()) * 1.2))
-    xLim = LIMIT
-    L1 = plt.Line2D(range(LIMIT), r['Likes'], label='Likes', color='b')
-    L2 = plt.Line2D(range(LIMIT), r['Shares'], label='Shares', color='r')
-    fig = plt.figure()
-    ax = fig.add_subplot(111, ylim=(0,yLim), xlim=(0,xLim))
-    ax.add_line(L1)
-    ax.add_line(L2)
-    ax.legend()
+    
+    
+    earlyLike  = {'color': 'r', 'lw': 1, 'ls': '--'}
+    agedLike   = {'color': 'r', 'lw': 2, 'ls': '-', 'label': 'Likes'}
+    earlyShare = {'color': 'b', 'lw': 1, 'ls': '--'}
+    agedShare  = {'color': 'b', 'lw': 2, 'ls': '-', 'label': 'Shares'}
+    
+    fig, ax = plt.subplots()
+
+    splitLine(ax, np.array(range(LIMIT)), np.array(r['Likes']), 1, earlyLike, agedLike)
+    splitLine(ax, np.array(range(LIMIT)), np.array(r['Shares']), 1, earlyShare, agedShare)
+
+    LNull = plt.Line2D(range(LIMIT), r['Shares'], ls='--', label='Recent Data\n(Early collection)', color='k')
+    ax.add_line(LNull)
+    ax.legend(bbox_to_anchor=(1.5,1))
+    
     ax.set_xticklabels(newTimes, rotation=60)
     ax.xaxis.set_major_formatter(xFormatter)
     ax.yaxis.set_major_formatter(yFormatter)
     ax.set_title(runner + ' Facebook Feedback')
+
+
+    plt.show()
+    
     fig.savefig(x + '.png', bbox_inches='tight')
