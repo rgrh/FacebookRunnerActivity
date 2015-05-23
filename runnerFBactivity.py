@@ -1,51 +1,61 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
-Created on Sat Apr 18 06:16:32 2015
+Created on Fri May 08 17:08:44 2015
 
 @author: Roger
 """
 
-LIMIT = 10
+
+CHART_LIMIT = 10
 
 
 import facebook, numpy as np, matplotlib.pyplot as plt
 from pandas import DataFrame
 from datetime import datetime 
 from matplotlib.ticker import FuncFormatter
+from string import lower
 
 
-chris = ('CVHILLforAmerica', 'Christopher Hill')
-ted = ('tedcruzpage', 'Ted Cruz')
-marco = ('MarcoRubio', 'Marco Rubio')
-rand = ('RandPaul', 'Rand Paul')
-jeb = ('jebbush', 'Jeb Bush')
-hillary = ('hillaryclinton', 'Hillary Clinton')
+
+def readRunners():
+    runnerFile = 'runners.csv'
+    fileObj = open(runnerFile,'r')
+    header = fileObj.readline().strip()
+    
+    runners = []
+    for line in fileObj.readlines():
+        runner, page, govPage = line.strip().split(',')
+        if govPage == '' or str(govPage) == '0':
+            govPage = False
+        else:
+            govPage = True
+    
+        entry = {'runner': runner,
+                 'page': page,
+                 'govPage': govPage}
+        runners.append(entry)
+        
+    fileObj.close()
+    return runners
 
 
-runners = ['chris', 'ted', 'marco', 'rand', 'hillary']
-
-
-#
-# Read in facebook token.
-'''To obtain a facebook token, 
-    - login to facebook through a web browser
-    - then visit, https://developers.facebook.com/tools/explorer/
-    - click "Get Token" button on top right
-    - click "Extended Permissions"
-    - checkmark in "publish_actions"
-    - click "Get Access Token"
-    - copy ugly string from "Access Token: " field
-    - save to file facebookToken.txt
-'''
-#
-fbTokenFile = open('facebookToken.txt', 'r')
-fbToken = fbTokenFile.readline()
-fbTokenFile.close()
-
-
-graph = facebook.GraphAPI(fbToken)
-
+def readToken():
+    '''
+    Reads in the Facebook Token.
+    To obtain a facebook token, 
+        - login to facebook through a web browser
+        - then visit, https://developers.facebook.com/tools/explorer/
+        - click "Get Token" button on top right
+        - click "Get Access Token"
+        - copy ugly string from "Access Token: " field
+        - save to file facebookToken.txt
+    '''
+    fbTokenFile = 'facebookToken.txt'
+    fileObj = open(fbTokenFile, 'r')
+    fbToken = fileObj.readline()
+    fileObj.close()
+    return fbToken
 
 
 ##
@@ -58,7 +68,7 @@ def fmtShares(Dict):
         return 0
 
 def fmtLikes(objID):
-    return graph.get_object(objID + '/likes', summary=True)['summary']['total_count']
+    return fbGraph.get_object(objID + '/likes', summary=True)['summary']['total_count']
 
 def fmtDate(timeStr):
     date, time = timeStr.split('T')
@@ -69,90 +79,22 @@ def fmtDate(timeStr):
     return d.strftime("%m %d %Y")
 
 
-
-def getPostData(runner):
-    global LIMIT
-    rPosts = graph.get_object(runner + '/posts', limit=100)['data']
-    
-    
-    frame = DataFrame(rPosts)
-    frame['shares'] = frame['shares'].map(fmtShares)
-    frame['likes'] = frame['id'].map(fmtLikes)
-    frame['created_time'] = frame['created_time'].map(fmtDate)
-
-    
-    
-    ##
-    ## Collect chart data
-    ##
-    shares = frame['shares']
-    likes = frame['likes']
-    times = frame['created_time']
-
-    
-    ##
-    ## Average multiple posts p/day
-    ##
-    i=0
-    prev=''
-    newShares = []
-    newLikes = []
-    global newTimes
-    last = len(times) - 1
-    for post in times:
-        if prev == '':
-            clctShares = (shares[i],)
-            clctLikes = (likes[i],)
-            prev = post
-        elif i == last:
-            if post == prev:
-                clctShares = clctShares + (shares[i],)
-                clctLikes = clctLikes + (likes[i],)
-                newShares.append(int(round(np.average(clctShares))))
-                newLikes.append(int(round(np.average(clctLikes))))
-                newTimes.append(times[i])
-            else:
-                newShares.append(int(round(np.average(clctShares))))
-                newLikes.append(int(round(np.average(clctLikes))))
-                newTimes.append(times[i-1])
-                newShares.append(shares[i])
-                newLikes.append(likes[i])
-                newTimes.append(times[i])
-        elif post == prev:
-            clctShares = clctShares + (shares[i],)
-            clctLikes = clctLikes + (likes[i],)
-        else:
-            newShares.append(int(round(np.average(clctShares))))
-            newLikes.append(int(round(np.average(clctLikes))))
-            newTimes.append(times[i - 1])
-            clctShares = (shares[i],)
-            clctLikes = (likes[i],)
-            prev = post
-        i += 1
-    
-    
-    try:
-        r = DataFrame(columns=('Date', 'Likes', 'Shares'))
-        r['Date'] = times
-        r['Likes'] = likes
-        r['Shares'] = shares
-    except ValueError, e:
-        print str(e)
-        print 'runner: ' + runner
-        print 'newTimes: ',
-        print len(times)
-        print times
-        print 'newLikes: ',
-        print len(likes)
-        print likes
-        print 'newShares: ',
-        print len(shares)
-        print shares
+def getPostData(fbGraph, entry):
+    global CHART_LIMIT
+    posts = fbGraph.get_object(entry['page'] + '/posts', limit=CHART_LIMIT*15)['data']
         
-    r = r.groupby(by='Date', sort=False).mean()
-    r = r.head(n=LIMIT)
-    r.fillna(value=0)
-    return r
+    frame = DataFrame(posts)
+    ##Later, maybe output this frame for further study
+    
+    postData = DataFrame(columns=('Date', 'Likes', 'Shares'))
+    postData['Shares'] = frame['shares'].map(fmtShares)
+    postData['Likes']  = frame['id'].map(fmtLikes)
+    postData['Date']   = frame['created_time'].map(fmtDate)
+    
+    postData = postData.groupby(by='Date', sort=False).mean()
+    postData = postData.head(n=CHART_LIMIT)
+    postData.fillna(value=0)
+    return postData
 
 
 def splitLine(ax, x, y, splitNum, style1, style2):
@@ -176,9 +118,9 @@ def splitLine(ax, x, y, splitNum, style1, style2):
 
 def fmtXlabels(x, pos):
     '''x=value, pos=position'''
-    if x >= len(newTimes):
+    if x >= len(dates):
         return ''
-    month, day, year = newTimes[int(x)].split(' ')
+    month, day, year = dates[int(x)].split(' ')
     return month + '/' + day + "\n " + year
 
 
@@ -187,38 +129,58 @@ def fmtYlabels(y, pos):
     y = int(y)
     return "{:,}".format(y)
 
-xFormatter = FuncFormatter(fmtXlabels)
-yFormatter = FuncFormatter(fmtYlabels)
-
-for x in runners:
-    newTimes = []
-    wall = eval(x)[0]
-    runner = eval(x)[1]
-    
-    r = getPostData(wall)
-    
-    
-    
-    earlyLike  = {'color': 'r', 'lw': 1, 'ls': '--'}
-    agedLike   = {'color': 'r', 'lw': 2, 'ls': '-', 'label': 'Likes'}
-    earlyShare = {'color': 'b', 'lw': 1, 'ls': '--'}
-    agedShare  = {'color': 'b', 'lw': 2, 'ls': '-', 'label': 'Shares'}
-    
-    fig, ax = plt.subplots()
-
-    splitLine(ax, np.array(range(LIMIT)), np.array(r['Likes']), 1, earlyLike, agedLike)
-    splitLine(ax, np.array(range(LIMIT)), np.array(r['Shares']), 1, earlyShare, agedShare)
-
-    LNull = plt.Line2D(range(LIMIT), r['Shares'], ls='--', label='Recent Data\n(Early collection)', color='k')
-    ax.add_line(LNull)
-    ax.legend(bbox_to_anchor=(1.5,1))
-    
-    ax.set_xticklabels(newTimes, rotation=60)
-    ax.xaxis.set_major_formatter(xFormatter)
-    ax.yaxis.set_major_formatter(yFormatter)
-    ax.set_title(runner + ' Facebook Feedback')
 
 
-    plt.show()
+if __name__ == '__main__':
     
-    fig.savefig(x + '.png', bbox_inches='tight')
+    xFormatter = FuncFormatter(fmtXlabels)
+    yFormatter = FuncFormatter(fmtYlabels)
+    runners = readRunners()
+    fbToken = readToken()
+    fbGraph = facebook.GraphAPI(fbToken)
+    
+    for runner in runners:#[:1]:
+        if lower(runner['page']) == 'null':
+             continue
+        
+        feedback = getPostData(fbGraph, runner)
+        dates = feedback.index.tolist()
+        
+        earlyLike  = {'color': 'r', 'lw': 1, 'ls': '--'}
+        agedLike   = {'color': 'r', 'lw': 2, 'ls': '-', 'label': 'Likes'}
+        earlyShare = {'color': 'b', 'lw': 1, 'ls': '--'}
+        agedShare  = {'color': 'b', 'lw': 2, 'ls': '-', 'label': 'Shares'}
+        
+        fig, ax = plt.subplots()
+    
+        splitLine(ax, np.array(range(CHART_LIMIT)),
+                  np.array(feedback['Likes']), 1,
+                  earlyLike, agedLike)
+        splitLine(ax, np.array(range(CHART_LIMIT)),
+                  np.array(feedback['Shares']), 1,
+                  earlyShare, agedShare)
+    
+        earlyData = plt.Line2D(range(CHART_LIMIT),
+                               feedback['Shares'], ls='--',
+                               label='Recent Data\n(Early collection)',
+                               color='k')
+        
+        ax.add_line(earlyData)
+        ax.legend(bbox_to_anchor=(1.5,1))
+        
+        ax.set_xticklabels(dates, rotation=60)
+        ax.xaxis.set_major_formatter(xFormatter)
+        ax.yaxis.set_major_formatter(yFormatter)
+        ax.set_title(runner['runner'] + ' Facebook Feedback')
+        plt.annotate('[Source: http://www.facebook.com/' + runner['page'] + ']',
+                     (0,0), (0, -60), xycoords='axes fraction',
+                     textcoords='offset points', va='top')
+        
+        if runner['govPage']:
+            plt.annotate('*Government Sponsored Page',
+                         (0,0), (0, -70), xycoords='axes fraction',
+                         textcoords='offset points', va='top')
+    
+        plt.show()
+        fig.savefig(runner['runner'].replace(' ','_') + '.png',
+                    bbox_inches='tight')
