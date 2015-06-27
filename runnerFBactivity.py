@@ -68,7 +68,8 @@ def fmtShares(Dict):
         return 0
 
 def fmtLikes(objID):
-    return fbGraph.get_object(objID + '/likes', summary=True)['summary']['total_count']
+    return fbGraph.get_object(objID + '/likes',
+                              summary=True)['summary']['total_count']
 
 def fmtDate(timeStr):
     date, time = timeStr.split('T')
@@ -81,7 +82,20 @@ def fmtDate(timeStr):
 
 def getPostData(fbGraph, entry):
     global CHART_LIMIT
-    posts = fbGraph.get_object(entry['page'] + '/posts', limit=CHART_LIMIT*15)['data']
+    retrieved = False
+    i=0
+    while retrieved == False:
+        i += 1
+        try:
+            posts = fbGraph.get_object(entry['page'] + '/posts',
+                                       limit=CHART_LIMIT*15)['data']
+            retrieved = True
+        except facebook.GraphAPIError:
+            print "Failed retrieving Graph object from facebook, retrying..."
+            pass
+        if i > 14:
+            print "Giving up"
+            return None
         
     frame = DataFrame(posts)
     ##Later, maybe output this frame for further study
@@ -139,11 +153,16 @@ if __name__ == '__main__':
     fbToken = readToken()
     fbGraph = facebook.GraphAPI(fbToken)
     
+    failed = []
     for runner in runners:#[:1]:
         if lower(runner['page']) == 'null':
              continue
         
         feedback = getPostData(fbGraph, runner)
+        if feedback is None:
+            print "Failed getting data for %s" % runner['runner']
+            failed.append(runner['runner'])
+            continue
         dates = feedback.index.tolist()
         
         earlyLike  = {'color': 'r', 'lw': 1, 'ls': '--'}
@@ -184,3 +203,7 @@ if __name__ == '__main__':
         plt.show()
         fig.savefig(runner['runner'].replace(' ','_') + '.png',
                     bbox_inches='tight')
+    
+    print 'Failed getting graphs for:'
+    for a in failed:
+        print a
